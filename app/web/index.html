@@ -58,6 +58,18 @@
   .btn-ghost:hover{border-color:var(--dim);background:#151c28}
   .btn:disabled{opacity:.42;cursor:not-allowed;transform:none;filter:none}
 
+  .adv{margin-top:12px;border-top:1px dashed var(--line);padding-top:12px}
+  .adv summary{cursor:pointer;font-size:12px;color:var(--dim);list-style:none;user-select:none;outline:none}
+  .adv summary::-webkit-details-marker{display:none}
+  .adv summary:before{content:"\25B8";display:inline-block;margin-right:6px;transition:transform .2s}
+  .adv[open] summary:before{transform:rotate(90deg)}
+  .adv summary:hover{color:var(--tx)}
+  .adv textarea{width:100%;margin-top:10px;min-height:66px;resize:vertical;background:var(--panel2);
+    color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:9px 11px;
+    font:12px/1.7 var(--mono);outline:none}
+  .adv textarea:focus{border-color:var(--cyan)}
+  .adv .hint{font-size:11px;color:var(--dim);margin-top:7px;line-height:1.7}
+  .adv .hint code{background:var(--panel2);padding:1px 5px;border-radius:4px;color:var(--cyan)}
   .progress-shell{height:10px;border-radius:999px;background:#0b1018;border:1px solid var(--line);overflow:hidden;margin:14px 0 6px}
   .progress-bar{height:100%;width:0%;border-radius:999px;
     background:linear-gradient(90deg,var(--cyan),var(--violet));transition:width .25s ease;box-shadow:0 0 16px rgba(34,211,238,.45)}
@@ -132,6 +144,11 @@
       <button class="btn btn-primary" id="startBtn">开始下载</button>
       <button class="btn btn-ghost" id="stopBtn" disabled>停止</button>
     </div>
+    <details class="adv">
+      <summary>高级 · 自定义请求头（需要登录 / 防盗链的链接填这里）</summary>
+      <textarea id="headersInput" spellcheck="false" placeholder="每行一条，格式 Name: value&#10;例如：&#10;Cookie: session=xxxxx&#10;Referer: https://example.com/"></textarea>
+      <div class="hint">浏览器能下、这里却提示「需要登录」或「拿不到文件大小」，八成是缺 Cookie。在浏览器按 F12 → Network → 找到该文件的请求 → 右键 Copy → Copy as cURL，把里面的 <code>Cookie:</code> 整行贴进来即可。</div>
+    </details>
     <div class="progress-shell"><div class="progress-bar" id="bar"></div></div>
     <div class="progress-meta">
       <span id="probeInfo">等待任务</span>
@@ -259,6 +276,7 @@
         break;
       case 'probe': {
         S.probe = ev;
+        if (ev.filename && !$('outName').value.trim()) $('outName').value = ev.filename;
         const bits = [];
         bits.push('大小 ' + fmtBytes(ev.size));
         bits.push(ev.accept_ranges ? '支持 Range' : '不支持 Range');
@@ -497,6 +515,18 @@
     return j;
   }
 
+  function parseHeaders(text){
+    const out = {};
+    (text || '').split(/\r?\n/).forEach(line => {
+      const s = line.trim();
+      if (!s || s.startsWith('#')) return;
+      const i = s.indexOf(':');
+      if (i <= 0) return;
+      out[s.slice(0, i).trim()] = s.slice(i + 1).trim();
+    });
+    return Object.keys(out).length ? out : undefined;
+  }
+
   async function startDownload(){
     const url = $('url').value.trim();
     if (!url) { toast('请先粘贴下载链接', 'err'); return; }
@@ -513,6 +543,7 @@
     const body = {
       url,
       output: $('outName').value.trim() || undefined,
+      headers: parseHeaders($('headersInput').value),
       max_concurrency: Number($('concRange').value),
       speed_limit: Number($('limitRange').value) ? Number($('limitRange').value) * 1024 * 1024 : null,
       verify_hash: $('hashInput').value.trim() || undefined,

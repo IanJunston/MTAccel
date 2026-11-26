@@ -190,7 +190,23 @@ class Downloader:
                 await self.emit({"type": "probe", **pr.to_dict()})
 
                 if pr.status >= 400:
-                    await self.emit({"type": "error", "message": f"HTTP {pr.status}，无法下载"})
+                    await self.emit(
+                        {"type": "error", "message": pr.note or f"HTTP {pr.status}，无法下载"}
+                    )
+                    return None
+
+                # 被踢到登录页 / 无权限：绝不能把登录页的 HTML 当文件存下来
+                if pr.needs_auth:
+                    await self.emit(
+                        {"type": "error", "message": pr.note or "链接需要登录或无权访问"}
+                    )
+                    return None
+
+                # 返回的是网页且没有可信长度 —— 大概率不是文件直链
+                if pr.size is None and (pr.content_type or "").lower().startswith("text/html"):
+                    await self.emit(
+                        {"type": "error", "message": pr.note or "返回的是网页而不是文件"}
+                    )
                     return None
 
                 if pr.can_parallel:

@@ -55,8 +55,14 @@ object AppCore {
 
     private var htmlCache: ByteArray? = null
 
+    /** 跟随匿名登录重定向拿到的 cookie 要留着，飞书分享链接靠它过鉴权。 */
+    val cookieJar = MemoryCookieJar()
+
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
+            .cookieJar(cookieJar)
+            .followRedirects(true)
+            .followSslRedirects(true)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
@@ -192,7 +198,8 @@ object AppCore {
             maxConcurrency = maxC,
             speedLimit = speedLimit,
             verifyHash = verifyHash,
-            verifyAlgo = algo
+            verifyAlgo = algo,
+            autoName = rawOut.isBlank()
         )
 
         busy = true
