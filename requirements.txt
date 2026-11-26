@@ -1,0 +1,8 @@
+# 多线程加速下载器 —— 运行依赖
+# Python 3.11+（用到 asyncio.TaskGroup 之外的新语法，3.10 未测）
+aiohttp>=3.9
+rich>=12.0
+
+# 说明：
+#   - 面板用 aiohttp.web 自建，不依赖 FastAPI/uvicorn，装包少、启动快
+#   - rich 只用于命令行进度条；只用 Web 面板可以不装（但 cli.py 会导入失败）

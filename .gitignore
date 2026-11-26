@@ -1,0 +1,29 @@
+# ---- 运行产物 ----
+downloads/
+temp/
+*.part
+*.part.json
+*.log
+
+# ---- 构建产物（exe 走 GitHub Releases，不进仓库）----
+dist/
+build/
+*.spec
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---- 本机私有 / Agent 工具目录 ----
+.skills/
+Ian上传/
+.runtime/
+.Plugins/
+
+# ---- 编辑器与系统 ----
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store

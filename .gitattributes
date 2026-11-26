@@ -1,0 +1,17 @@
+# 默认按文本处理，自动探测二进制
+* text=auto
+
+# 源码统一 LF（跨平台一致）
+*.py    text eol=lf
+*.md    text eol=lf
+*.html  text eol=lf
+*.txt   text eol=lf
+*.json  text eol=lf
+
+# 批处理必须是 CRLF（cmd 解析更稳），且是 GBK 编码，不要做编码转换
+*.bat   text eol=crlf working-tree-encoding=GBK
+
+# 二进制
+*.ico   binary
+*.exe   binary
+*.png   binary

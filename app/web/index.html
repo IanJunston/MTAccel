@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>多线程下载加速器</title>
+<style>
+  :root{
+    --bg:#0a0d13; --panel:#111722; --panel2:#0e131c; --line:#1d2634;
+    --tx:#e6edf7; --dim:#7b8a9f; --dim2:#4d5b70;
+    --cyan:#22d3ee; --violet:#a78bfa; --ok:#2dd4a7; --warn:#fbbf24; --err:#f87171;
+    --mono: ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:
+      radial-gradient(900px 500px at 12% -10%, rgba(34,211,238,.10), transparent 60%),
+      radial-gradient(800px 500px at 88% 0%, rgba(167,139,250,.10), transparent 60%),
+      var(--bg);
+    color:var(--tx);
+    font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size:14px; line-height:1.6; min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 20px 60px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+  .brand{display:flex;align-items:baseline;gap:12px}
+  .brand h1{font-size:20px;margin:0;letter-spacing:.5px}
+  .brand h1 span{background:linear-gradient(90deg,var(--cyan),var(--violet));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .brand small{color:var(--dim);font-size:12px}
+  .badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;
+    border:1px solid var(--line);background:var(--panel);font-size:12.5px;color:var(--dim);font-variant-numeric:tabular-nums}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--dim2);box-shadow:0 0 0 3px rgba(255,255,255,.03)}
+  .badge[data-s="running"] .dot,.badge[data-s="probing"] .dot{background:var(--cyan);box-shadow:0 0 10px var(--cyan);animation:pulse 1.4s infinite}
+  .badge[data-s="done"] .dot{background:var(--ok);box-shadow:0 0 10px var(--ok)}
+  .badge[data-s="paused"] .dot{background:var(--warn)}
+  .badge[data-s="error"] .dot{background:var(--err);box-shadow:0 0 10px var(--err)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+  .card{background:linear-gradient(180deg,#131a26,#0f141d);border:1px solid var(--line);
+    border-radius:14px;padding:16px 18px;margin-bottom:14px;box-shadow:0 10px 30px -20px #000}
+  .card h3{margin:0 0 12px;font-size:13px;font-weight:600;color:var(--dim);letter-spacing:.6px;text-transform:uppercase}
+  .card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+  .card-head h3{margin:0}
+
+  .input-row{display:flex;gap:10px;flex-wrap:wrap}
+  .input-row input[type=text]{
+    flex:1 1 420px;min-width:0;background:var(--panel2);border:1px solid var(--line);color:var(--tx);
+    padding:11px 14px;border-radius:10px;font-size:13.5px;font-family:var(--mono);outline:none;transition:.2s}
+  .input-row input[type=text]:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+  .input-row input.small{flex:0 1 180px}
+  .btn{border:none;border-radius:10px;padding:11px 22px;font-size:13.5px;font-weight:600;cursor:pointer;
+    transition:.18s;font-family:inherit;white-space:nowrap}
+  .btn-primary{background:linear-gradient(135deg,var(--cyan),#3b82f6);color:#04121a;box-shadow:0 8px 20px -10px rgba(34,211,238,.8)}
+  .btn-primary:hover{filter:brightness(1.1);transform:translateY(-1px)}
+  .btn-ghost{background:var(--panel2);color:var(--tx);border:1px solid var(--line)}
+  .btn-ghost:hover{border-color:var(--dim);background:#151c28}
+  .btn:disabled{opacity:.42;cursor:not-allowed;transform:none;filter:none}
+
+  .progress-shell{height:10px;border-radius:999px;background:#0b1018;border:1px solid var(--line);overflow:hidden;margin:14px 0 6px}
+  .progress-bar{height:100%;width:0%;border-radius:999px;
+    background:linear-gradient(90deg,var(--cyan),var(--violet));transition:width .25s ease;box-shadow:0 0 16px rgba(34,211,238,.45)}
+  .progress-meta{display:flex;justify-content:space-between;font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums}
+
+  .stats{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:14px}
+  .stat{background:linear-gradient(180deg,#131a26,#0f141d);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+  .stat .k{font-size:11.5px;color:var(--dim);letter-spacing:.4px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stat .v{font-size:19px;font-weight:650;font-variant-numeric:tabular-nums;font-family:var(--mono);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stat .v.big{font-size:24px;background:linear-gradient(90deg,var(--cyan),var(--violet));
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+
+  canvas{display:block;width:100%;border-radius:10px}
+  #speedChart{height:180px}
+  #chunkMap{height:150px;background:#0b1018;border:1px solid var(--line)}
+
+  .legend{display:flex;gap:14px;font-size:11.5px;color:var(--dim);align-items:center}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+
+  #strategyList{max-height:220px;overflow:auto;font-family:var(--mono);font-size:12.3px}
+  #strategyList::-webkit-scrollbar{width:8px}
+  #strategyList::-webkit-scrollbar-thumb{background:#1e2836;border-radius:4px}
+  .srow{display:grid;grid-template-columns:74px 70px 96px 96px 1fr;gap:10px;padding:5px 6px;border-radius:6px;align-items:center}
+  .srow:nth-child(odd){background:rgba(255,255,255,.017)}
+  .stag{font-size:11px;padding:1px 8px;border-radius:999px;justify-self:start;font-family:system-ui}
+  .stag.ramp{background:rgba(34,211,238,.12);color:var(--cyan)}
+  .stag.aimd{background:rgba(167,139,250,.14);color:var(--violet)}
+  .snum{color:var(--tx);font-variant-numeric:tabular-nums}
+  .sgain{color:var(--ok)}
+  .sgain.neg{color:var(--err)}
+  .sreason{color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  .settings{display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:22px;align-items:end}
+  .field label{display:block;font-size:12px;color:var(--dim);margin-bottom:7px}
+  .field .val{color:var(--cyan);font-family:var(--mono)}
+  input[type=range]{width:100%;-webkit-appearance:none;height:4px;border-radius:999px;background:#1c2635;outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;
+    background:var(--cyan);cursor:pointer;box-shadow:0 0 10px rgba(34,211,238,.7)}
+  .field input[type=text]{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--tx);
+    padding:8px 11px;border-radius:8px;font-size:12.5px;font-family:var(--mono);outline:none}
+  .field input[type=text]:focus{border-color:var(--cyan)}
+
+  .note{font-size:12px;color:var(--dim);margin-top:8px}
+  .toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,20px);background:#1a2230;border:1px solid var(--line);
+    color:var(--tx);padding:11px 20px;border-radius:10px;font-size:13px;opacity:0;pointer-events:none;transition:.3s;z-index:99;max-width:80vw}
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+  .toast.err{border-color:rgba(248,113,113,.5);color:#fecaca}
+  .toast.ok{border-color:rgba(45,212,167,.5);color:#a7f3d0}
+
+  @media (max-width:900px){
+    .stats{grid-template-columns:repeat(3,1fr)}
+    .settings{grid-template-columns:1fr}
+    .srow{grid-template-columns:64px 56px 80px 80px 1fr}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1><span>MTAccel</span> 多线程下载加速器</h1>
+      <small>自适应并发 · 断点续传</small>
+    </div>
+    <div class="badge" id="badge" data-s="idle"><span class="dot"></span><span id="badgeText">空闲</span></div>
+  </header>
+
+  <section class="card">
+    <div class="input-row">
+      <input type="text" id="url" placeholder="https://example.com/file.iso  粘贴直链后回车" spellcheck="false">
+      <input type="text" id="outName" class="small" placeholder="保存文件名（可空）" spellcheck="false">
+      <button class="btn btn-primary" id="startBtn">开始下载</button>
+      <button class="btn btn-ghost" id="stopBtn" disabled>停止</button>
+    </div>
+    <div class="progress-shell"><div class="progress-bar" id="bar"></div></div>
+    <div class="progress-meta">
+      <span id="probeInfo">等待任务</span>
+      <span id="pathInfo"></span>
+    </div>
+  </section>
+
+  <section class="stats">
+    <div class="stat"><div class="k">进度</div><div class="v big" id="pct">0.0%</div></div>
+    <div class="stat"><div class="k">瞬时速度</div><div class="v" id="speed">—</div></div>
+    <div class="stat"><div class="k">已下载</div><div class="v" id="done">—</div></div>
+    <div class="stat"><div class="k">剩余时间</div><div class="v" id="eta">--:--</div></div>
+    <div class="stat"><div class="k">并发 / 活跃</div><div class="v" id="conc">—</div></div>
+    <div class="stat"><div class="k">平均 / 重试</div><div class="v" id="avg">—</div></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h3>速度曲线</h3><span class="note" id="chartInfo" style="margin:0"></span></div>
+    <canvas id="speedChart"></canvas>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h3>分块进度</h3>
+      <div class="legend">
+        <span><i style="background:#1b2330"></i>待下载</span>
+        <span><i style="background:#22d3ee"></i>下载中</span>
+        <span><i style="background:#2dd4a7"></i>已完成</span>
+        <span><i style="background:#f87171"></i>失败</span>
+      </div>
+    </div>
+    <canvas id="chunkMap"></canvas>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h3>策略探测（自动寻找最佳并发）</h3><span class="note" id="stratInfo" style="margin:0"></span></div>
+    <div id="strategyList"><div class="note">尚未开始</div></div>
+  </section>
+
+  <section class="card settings">
+    <div class="field">
+      <label>最大并发 <span class="val" id="concVal">32</span></label>
+      <input type="range" id="concRange" min="1" max="64" value="32">
+    </div>
+    <div class="field">
+      <label>限速 <span class="val" id="limitVal">不限</span></label>
+      <input type="range" id="limitRange" min="0" max="50" value="0" step="1">
+    </div>
+    <div class="field">
+      <label>校验 Hash（可选，如 sha256:abc…）</label>
+      <input type="text" id="hashInput" placeholder="sha256:… 或 md5:…" spellcheck="false">
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const MONO = getComputedStyle(document.documentElement).getPropertyValue('--mono');
+
+  const S = {
+    status: 'idle',
+    mode: 'parallel',
+    total: 0,
+    confirmed: 0,
+    totalChunks: 0,
+    chunks: null,
+    chunkDirty: true,
+    samples: [],
+    peak: 0,
+    strategy: [],
+    done: null,
+    maxC: 32,
+    probe: null,
+    speed: 0,
+  };
+
+  // ---------- 格式化 ----------
+  function fmtBytes(n){
+    if (n === null || n === undefined || isNaN(n)) return '—';
+    const u = ['B','KB','MB','GB','TB'];
+    let v = Number(n), i = 0;
+    while (v >= 1024 && i < u.length-1){ v /= 1024; i++; }
+    return (i === 0 ? Math.round(v) : v.toFixed(2)) + ' ' + u[i];
+  }
+  function fmtSpeed(n){ return n > 0 ? fmtBytes(n) + '/s' : '—'; }
+  function fmtEta(s){
+    if (s === null || s === undefined || !isFinite(s) || s < 0) return '--:--';
+    s = Math.round(s);
+    const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+    return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
+                 : `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  }
+
+  // ---------- 状态 ----------
+  const STATUS_TEXT = {
+    idle:'空闲', probing:'探测中', running:'下载中', done:'已完成', paused:'已暂停', error:'出错'
+  };
+  function setStatus(s){
+    S.status = s;
+    const badge = $('badge');
+    badge.dataset.s = s;
+    $('badgeText').textContent = STATUS_TEXT[s] || s;
+    const running = (s === 'running' || s === 'probing');
+    $('startBtn').disabled = running;
+    $('stopBtn').disabled = !running;
+  }
+
+  function toast(msg, kind){
+    const t = $('toast');
+    t.textContent = msg;
+    t.className = 'toast show' + (kind ? ' ' + kind : '');
+    clearTimeout(t._h);
+    t._h = setTimeout(() => { t.className = 'toast'; }, 4200);
+  }
+
+  // ---------- 事件处理 ----------
+  function handle(ev){
+    switch(ev.type){
+      case 'state':
+        if (ev.state === 'done') { /* 由 done 事件处理 */ }
+        else setStatus(ev.state || 'idle');
+        break;
+      case 'probe': {
+        S.probe = ev;
+        const bits = [];
+        bits.push('大小 ' + fmtBytes(ev.size));
+        bits.push(ev.accept_ranges ? '支持 Range' : '不支持 Range');
+        if (ev.single_speed) bits.push('单连接 ' + fmtSpeed(ev.single_speed));
+        if (ev.etag) bits.push('ETag ' + String(ev.etag).slice(0,18));
+        if (ev.note) bits.push(ev.note);
+        $('probeInfo').textContent = bits.join('  ·  ');
+        break;
+      }
+      case 'plan': {
+        S.mode = ev.mode;
+        S.total = ev.size || 0;
+        S.totalChunks = ev.total_chunks || 0;
+        S.chunks = ev.total_chunks ? new Uint8Array(ev.total_chunks) : null;
+        S.chunkDirty = true;
+        if (ev.mode === 'single') {
+          $('stratInfo').textContent = '服务器不支持 Range，退化为单流下载';
+        } else {
+          $('stratInfo').textContent = `${ev.total_chunks} 块 × ${fmtBytes(ev.chunk_size)}`
+            + (ev.resumed ? ` · 续传（已完成 ${ev.done_chunks} 块）` : '');
+        }
+        $('pathInfo').textContent = '';
+        break;
+      }
+      case 'chunk': {
+        if (!S.chunks || ev.i >= S.chunks.length) break;
+        S.chunks[ev.i] = ev.s === 'done' ? 2 : ev.s === 'active' ? 1 : ev.s === 'failed' ? 3 : 0;
+        S.chunkDirty = true;
+        break;
+      }
+      case 'progress': updateProgress(ev); break;
+      case 'strategy': addStrategy(ev); break;
+      case 'verify':
+        if (ev.stage === 'size') toast('校验文件大小…');
+        else if (ev.stage === 'hash') {
+          $('probeInfo').textContent = `校验 Hash ${ev.percent ? ev.percent.toFixed(0) + '%' : '…'}`;
+        }
+        break;
+      case 'done':
+        S.done = ev;
+        S.confirmed = ev.size || S.confirmed;
+        S.total = ev.size || S.total;
+        setStatus('done');
+        $('bar').style.width = '100%';
+        $('pct').textContent = '100.0%';
+        $('pathInfo').textContent = ev.path;
+        toast('下载完成 · 平均 ' + fmtSpeed(ev.avg_speed) + ' · 峰值 ' + fmtSpeed(ev.peak_speed), 'ok');
+        break;
+      case 'error':
+        setStatus('error');
+        toast(ev.message || '未知错误', 'err');
+        break;
+    }
+  }
+
+  function updateProgress(p){
+    S.total = p.total || S.total;
+    S.confirmed = p.confirmed || 0;
+    S.speed = p.speed || 0;
+    S.peak = Math.max(S.peak, p.speed || 0);
+    S.samples.push(p.speed || 0);
+    if (S.samples.length > 240) S.samples.shift();
+
+    if (S.status !== 'done') setStatus('running');
+    const pct = p.percent || 0;
+    $('bar').style.width = pct.toFixed(2) + '%';
+    $('pct').textContent = pct.toFixed(1) + '%';
+    $('speed').textContent = fmtSpeed(p.speed);
+    $('done').textContent = fmtBytes(p.confirmed) + ' / ' + fmtBytes(p.total);
+    $('eta').textContent = fmtEta(p.eta);
+    $('conc').textContent = (p.concurrency || '-') + ' / ' + (p.active || 0);
+    $('avg').textContent = fmtSpeed(p.avg_speed) + ' · ' + (p.errors || 0);
+    $('chartInfo').textContent = '峰值 ' + fmtSpeed(S.peak) + ' · 窗口 60s';
+  }
+
+  function addStrategy(ev){
+    S.strategy.push(ev);
+    if (S.strategy.length > 60) S.strategy.shift();
+    renderStrategy();
+  }
+
+  function renderStrategy(){
+    const box = $('strategyList');
+    if (!S.strategy.length) { box.innerHTML = '<div class="note">尚未开始</div>'; return; }
+    const rows = S.strategy.slice(-24).reverse().map(e => {
+      const phase = e.phase === 'ramp' ? 'ramp' : 'aimd';
+      const tagTxt = phase === 'ramp' ? '爬坡' : '稳态';
+      let gain = '—';
+      let gainCls = '';
+      if (typeof e.gain === 'number') {
+        gain = (e.gain * 100).toFixed(0) + '%';
+        if (e.gain < 0.15) gainCls = ' neg';
+      }
+      return `<div class="srow">
+        <span class="stag ${phase}">${tagTxt}</span>
+        <span class="snum">${e.concurrency} 并发</span>
+        <span class="snum">${fmtSpeed(e.speed)}</span>
+        <span class="sgain${gainCls}">${gain}</span>
+        <span class="sreason" title="${escapeAttr(e.reason || '')}">${escapeHtml(e.reason || '')}</span>
+      </div>`;
+    }).join('');
+    box.innerHTML = rows;
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function escapeAttr(s){ return escapeHtml(s); }
+
+  // ---------- 绘制：速度曲线 ----------
+  const speedCanvas = $('speedChart');
+  const chunkCanvas = $('chunkMap');
+
+  function fitCanvas(c){
+    const dpr = window.devicePixelRatio || 1;
+    const w = c.clientWidth, h = c.clientHeight;
+    if (c.width !== Math.round(w*dpr) || c.height !== Math.round(h*dpr)) {
+      c.width = Math.round(w*dpr); c.height = Math.round(h*dpr);
+    }
+    const ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return {ctx, w, h};
+  }
+
+  function drawSpeed(){
+    const {ctx, w, h} = fitCanvas(speedCanvas);
+    ctx.clearRect(0, 0, w, h);
+
+    // 网格
+    ctx.strokeStyle = 'rgba(255,255,255,.045)';
+    ctx.lineWidth = 1;
+    for (let i = 1; i <= 4; i++) {
+      const y = (h / 5) * i;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    }
+
+    const pts = S.samples;
+    if (pts.length < 2) {
+      ctx.fillStyle = 'rgba(123,138,159,.6)';
+      ctx.font = '13px ' + MONO;
+      ctx.fillText('等待数据…', 14, h/2 + 5);
+      return;
+    }
+
+    const maxV = Math.max(S.peak, 1) * 1.15;
+    const n = pts.length;
+    const xAt = i => (i / (n - 1)) * w;
+    const yAt = v => h - Math.min(h, (v / maxV) * h);
+
+    // 面积
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, 'rgba(34,211,238,.32)');
+    grad.addColorStop(1, 'rgba(34,211,238,0)');
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    for (let i = 0; i < n; i++) ctx.lineTo(xAt(i), yAt(pts[i]));
+    ctx.lineTo(w, h);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // 折线
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const x = xAt(i), y = yAt(pts[i]);
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+    ctx.strokeStyle = '#22d3ee';
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.shadowColor = 'rgba(34,211,238,.65)';
+    ctx.shadowBlur = 8;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // 峰值标注
+    ctx.fillStyle = 'rgba(123,138,159,.75)';
+    ctx.font = '11.5px ' + MONO;
+    ctx.fillText(fmtSpeed(maxV / 1.15), 8, 14);
+  }
+
+  // ---------- 绘制：分块热力图 ----------
+  function drawChunks(){
+    if (!S.chunkDirty) return;
+    S.chunkDirty = false;
+    const {ctx, w, h} = fitCanvas(chunkCanvas);
+    ctx.clearRect(0, 0, w, h);
+
+    const n = S.totalChunks;
+    if (!n || !S.chunks) {
+      ctx.fillStyle = 'rgba(123,138,159,.6)';
+      ctx.font = '13px ' + MONO;
+      ctx.fillText(S.mode === 'single' ? '服务器不支持 Range，单流模式无分块' : '等待分块规划…', 14, h/2 + 5);
+      return;
+    }
+
+    const pad = 8;
+    const W = w - pad*2, H = h - pad*2;
+    const cols = Math.max(1, Math.ceil(Math.sqrt(n * W / H)));
+    const rows = Math.max(1, Math.ceil(n / cols));
+    const cw = W / cols, ch = H / rows;
+    const gap = cw > 4 ? 1.2 : 0.35;
+
+    const COLORS = ['#1b2330', '#22d3ee', '#2dd4a7', '#f87171'];
+    for (let i = 0; i < n; i++) {
+      const r = Math.floor(i / cols), c = i % cols;
+      const x = pad + c * cw, y = pad + r * ch;
+      ctx.fillStyle = COLORS[S.chunks[i]] || COLORS[0];
+      ctx.fillRect(x, y, Math.max(1, cw - gap), Math.max(1, ch - gap));
+    }
+
+    // 完成率
+    let done = 0;
+    for (let i = 0; i < n; i++) if (S.chunks[i] === 2) done++;
+    ctx.fillStyle = 'rgba(123,138,159,.8)';
+    ctx.font = '11.5px ' + MONO;
+    ctx.fillText(`${done}/${n} 块完成`, pad + 2, 12);
+  }
+
+  function loop(){
+    drawSpeed();
+    drawChunks();
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- 网络 ----------
+  async function post(url, body){
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body || {})
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.message || j.error || ('HTTP ' + r.status));
+    return j;
+  }
+
+  async function startDownload(){
+    const url = $('url').value.trim();
+    if (!url) { toast('请先粘贴下载链接', 'err'); return; }
+    if (!/^https?:\/\//i.test(url)) { toast('只支持 http/https 直链', 'err'); return; }
+
+    S.samples = []; S.peak = 0; S.strategy = [];
+    S.totalChunks = 0; S.chunks = null; S.chunkDirty = true; S.done = null;
+    renderStrategy();
+    setStatus('probing');
+    $('probeInfo').textContent = '正在探测服务器能力…';
+    $('bar').style.width = '0%';
+    $('pct').textContent = '0.0%';
+
+    const body = {
+      url,
+      output: $('outName').value.trim() || undefined,
+      max_concurrency: Number($('concRange').value),
+      speed_limit: Number($('limitRange').value) ? Number($('limitRange').value) * 1024 * 1024 : null,
+      verify_hash: $('hashInput').value.trim() || undefined,
+    };
+    try {
+      const j = await post('/api/start', body);
+      if (j.output) $('pathInfo').textContent = j.output;
+    } catch (e) {
+      setStatus('error');
+      toast('启动失败：' + e.message, 'err');
+    }
+  }
+
+  async function stopDownload(){
+    try {
+      const j = await post('/api/stop', {});
+      toast(j.message || '已停止', 'ok');
+    } catch (e) {
+      toast('停止失败：' + e.message, 'err');
+    }
+  }
+
+  async function pushConfig(){
+    const c = Number($('concRange').value);
+    const lim = Number($('limitRange').value);
+    try {
+      await post('/api/config', {
+        max_concurrency: c,
+        speed_limit: lim ? lim * 1024 * 1024 : null
+      });
+    } catch (e) { /* 空闲时忽略 */ }
+  }
+
+  // ---------- 绑定 ----------
+  $('startBtn').addEventListener('click', startDownload);
+  $('stopBtn').addEventListener('click', stopDownload);
+  $('url').addEventListener('keydown', e => { if (e.key === 'Enter') startDownload(); });
+
+  $('concRange').addEventListener('input', e => {
+    $('concVal').textContent = e.target.value;
+    S.maxC = Number(e.target.value);
+  });
+  $('concRange').addEventListener('change', pushConfig);
+
+  $('limitRange').addEventListener('input', e => {
+    const v = Number(e.target.value);
+    $('limitVal').textContent = v ? v + ' MB/s' : '不限';
+  });
+  $('limitRange').addEventListener('change', pushConfig);
+
+  // ---------- SSE ----------
+  function connect(){
+    const es = new EventSource('/api/events');
+    es.onmessage = (m) => {
+      let ev;
+      try { ev = JSON.parse(m.data); } catch (e) { return; }
+      handle(ev);
+    };
+    es.onerror = () => { /* EventSource 自动重连 */ };
+  }
+
+  // 初始化：读一次状态，若是完成态则补齐路径
+  fetch('/api/state').then(r => r.json()).then(j => {
+    if (j && j.progress && j.progress.total) updateProgress(j.progress);
+  }).catch(() => {});
+
+  setStatus('idle');
+  connect();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
