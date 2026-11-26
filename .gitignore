@@ -27,3 +27,15 @@ Ian上传/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# ---- Android ----
+android/local.properties
+android/.gradle/
+android/build/
+android/app/build/
+android/.kotlin/
+*.apk
+*.aab
+*.jks
+*.keystore
+captures/

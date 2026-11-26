@@ -2,11 +2,12 @@
 
 **一个会自动找最佳并发的 HTTP(S) 下载器。** 给一个直链，它先探测服务器能力和当前网络状况，再决定开几条连接、怎么切块，然后边下边把速度和分块状态画出来。
 
-A self-tuning multi-threaded downloader for Windows — probes the server, ramps concurrency to find the sweet spot, and visualizes progress in a local web panel.
+A self-tuning multi-threaded downloader for Windows and Android — probes the server, ramps concurrency to find the sweet spot, and visualizes progress in a local web panel.
 
 - 纯本地运行，不经过任何第三方服务器
 - 零前端依赖：面板是单文件 HTML，引擎用 SSE 推事件
 - 引擎层与界面层完全解耦，方便替换实现
+- Windows（exe / 源码）与 Android 平板（APK）共用同一套面板与事件协议
 
 ---
 
@@ -46,6 +47,29 @@ python app/cli.py "https://example.com/big.iso" --hash sha256
 | `--limit` | 限速（如 `10M`、`500K`） |
 | `-H` | 自定义请求头，可重复，格式 `Name: value` |
 | `--hash` | 完成后校验整体 hash（`md5`/`sha1`/`sha256`） |
+
+### 方式四：安卓平板（APK）
+
+从 [Releases](../../releases) 下载 `MTAccel-android-0.1.0.apk`，拷到平板安装即可，不需要装任何运行环境。
+
+- **要求**：Android 7.0（API 24）及以上
+- **文件存哪**：下载完成后自动导出到系统「下载」目录下的 `Download/MTAccel/`，在文件管理器里直接能看到
+- **后台保活**：用前台服务 + 通知栏进度，切到后台也会继续下
+- **权限**：只需要网络和通知，不读你的任何文件
+
+界面和桌面版是同一份 HTML：App 内置一个只监听 `127.0.0.1` 的本地 HTTP 服务，WebView 打开它，所以面板一行都没改。
+
+从源码构建：
+
+```bash
+cd android
+# local.properties 里写 sdk.dir=/path/to/Android/Sdk
+gradle assembleRelease
+# 产物：app/build/outputs/apk/release/app-release.apk
+```
+
+> 项目路径含中文时，Gradle 需要 `android.overridePathCheck=true`（已写进 `gradle.properties`）。
+> 当前 release 用 debug 证书签名，方便自装；上架应用商店需换正式签名。
 
 ---
 
@@ -138,6 +162,15 @@ MTAccel/
 │  ├─ test_engine.py     续传 / 全量 / 限速 三用例（自包含）
 │  ├─ test_web.py        自包含端到端（同进程起源站+面板）
 │  └─ boot_check.py      冒烟检查：确认面板能独立启动
+├─ android/              安卓版（Kotlin，独立 Gradle 工程）
+│  └─ app/src/main/
+│     ├─ java/com/ianjunston/mtaccel/
+│     │  ├─ Engine.kt        引擎：探测/分块/并发/重试/校验（OkHttp + 协程）
+│     │  ├─ HttpServer.kt    极简 HTTP 服务 + SSE + JSON 序列化
+│     │  ├─ AppCore.kt       路由、状态、事件广播、导出到系统下载目录
+│     │  ├─ MainActivity.kt  WebView 加载 127.0.0.1 面板
+│     │  └─ DownloadService.kt 前台服务 + 通知栏进度
+│     └─ assets/index.html   与桌面版同一份面板
 ├─ icon.ico
 ├─ 安装依赖.bat
 ├─ 启动面板.bat
@@ -218,6 +251,8 @@ pyinstaller --onefile --name MTAccel --icon icon.ico \
 
 ## Roadmap
 
+- ~~Android 平板版（APK）~~ ✅ 已完成（v0.1.0，Kotlin + 内嵌本地服务 + WebView 复用面板）
+- 安卓端断点续传（当前只支持单次完整下载）
 - 多任务队列 + 面板任务列表
 - 「策略对比实验」模式：一次跑 1/2/4/8/16 并发，自动出对比图
 - 用 Rust 重写 `core/`（前端与事件协议不变，直接替换）
