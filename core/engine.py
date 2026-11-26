@@ -189,7 +189,8 @@ class Downloader:
                 self.probe = pr
                 await self.emit({"type": "probe", **pr.to_dict()})
 
-                if pr.status >= 400:
+                # 注意：HEAD 被 CDN 禁用时 status 是 404/405，但只要 Range 探到了真实大小就照下
+                if pr.status >= 400 and pr.size is None:
                     await self.emit(
                         {"type": "error", "message": pr.note or f"HTTP {pr.status}，无法下载"}
                     )

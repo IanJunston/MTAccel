@@ -229,6 +229,10 @@ async def probe(
             res.final_url = str(r.url)
             if r.status == 206:
                 res.accept_ranges = True
+                # HEAD 常被 CDN 禁掉（404/405），真正能不能下以 Range 结果为准
+                res.status = 200
+                if res.note.startswith("HEAD "):
+                    res.note = ""
                 m = _CONTENT_RANGE_RE.search(r.headers.get("Content-Range") or "")
                 if m and m.group(3) != "*":
                     res.size = int(m.group(3))  # Content-Range 的总长最权威
@@ -245,6 +249,9 @@ async def probe(
             elif r.status == 200:
                 # 服务器忽略了 Range：只能单流下载
                 res.accept_ranges = False
+                res.status = 200
+                if res.note.startswith("HEAD "):
+                    res.note = ""
                 res.ttfb = time.perf_counter() - t0
                 if res.size is None:
                     cl = r.headers.get("Content-Length")
