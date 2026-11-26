@@ -215,18 +215,17 @@ object AppCore {
                 eng.run(url, outFile, headers, opts)
                 // 完成后导出到系统「下载」目录
                 val exported = exportToPublic(ctx, outFile)
-                if (exported != null) {
-                    emit(
-                        mapOf(
-                            "type" to "done",
-                            "size" to outFile.length(),
-                            "elapsed" to (lastDone["elapsed"] ?: 0.0),
-                            "avg_speed" to (lastDone["avg_speed"] ?: 0L),
-                            "peak_speed" to (lastDone["peak_speed"] ?: 0L),
-                            "path" to exported
-                        )
+                // 导出失败（没权限 / 空间不足）也必须发 done，否则前端永远等不到结束
+                emit(
+                    mapOf(
+                        "type" to "done",
+                        "size" to outFile.length(),
+                        "elapsed" to (lastDone["elapsed"] ?: 0.0),
+                        "avg_speed" to (lastDone["avg_speed"] ?: 0L),
+                        "peak_speed" to (lastDone["peak_speed"] ?: 0L),
+                        "path" to (exported ?: outFile.absolutePath)
                     )
-                }
+                )
             } catch (e: CancelledException) {
                 emit(mapOf("type" to "state", "state" to "cancelled"))
             } catch (e: Exception) {
@@ -271,7 +270,19 @@ object AppCore {
     // ---------------- 导出到公共下载目录 ----------------
 
     private fun exportToPublic(ctx: Context, src: File): String? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        // Android 10 以下没有分区存储，也没有 MediaStore.Downloads，直接写公共目录
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return runCatching {
+                @Suppress("DEPRECATION")
+                val pub = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                val dir = File(pub, "MTAccel").apply { mkdirs() }
+                val dst = File(dir, src.name)
+                src.inputStream().use { input ->
+                    dst.outputStream().use { out -> input.copyTo(out, 256 * 1024) }
+                }
+                "/Download/MTAccel/${src.name}"
+            }.getOrNull()
+        }
         return runCatching {
             val values = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, src.name)

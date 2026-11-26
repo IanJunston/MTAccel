@@ -45,6 +45,14 @@ class MainActivity : AppCompatActivity() {
             notifPerm.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
 
+        // 3b. 存储权限（Android 9 及以下写公共「下载」目录要用，10+ 走 MediaStore 不需要）
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            notifPerm.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
+
         // 4. WebView 加载面板
         val w = WebView(this)
         web = w
