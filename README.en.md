@@ -4,6 +4,8 @@
 
 [中文](README.md) | [English](README.en.md)
 
+> The GUI and the script/file names in this repository are Chinese. Button labels and error strings are quoted verbatim (so you can match them on screen) with an English gloss in parentheses; Chinese file names are kept as-is because they are real paths.
+
 - Runs entirely on your machine, no third-party servers
 - Zero front-end dependencies: the panel is a single HTML file, the engine pushes SSE events
 - Engine and UI are fully decoupled, so either side can be replaced

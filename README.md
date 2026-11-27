@@ -1,5 +1,7 @@
 # MTAccel · 多线程加速下载器
 
+[中文](README.md) | [English](README.en.md)
+
 **一个会自动找最佳并发的 HTTP(S) 下载器。** 给一个直链，它先探测服务器能力和当前网络状况，再决定开几条连接、怎么切块，然后边下边把速度和分块状态画出来。
 
 A self-tuning multi-threaded downloader for Windows and Android — probes the server, ramps concurrency to find the sweet spot, and visualizes progress in a local web panel.
