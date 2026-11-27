@@ -52,6 +52,7 @@ class Options:
     ramp_window: float = 2.0
     min_gain: float = 0.15
     progress_interval: float = 0.2
+    insecure: bool = False               # 跳过 HTTPS 证书校验（仅对信任的站点）
 
 
 class TokenBucket:
@@ -180,7 +181,12 @@ class Downloader:
 
     async def run(self) -> dict | None:
         self._t_start = time.perf_counter()
-        connector = aiohttp.TCPConnector(limit=0, force_close=False)
+        connector = aiohttp.TCPConnector(
+            limit=0,
+            force_close=False,
+            # ssl=False 关掉证书校验，给被本地代理拦截的站点留条路
+            ssl=(False if self.opt.insecure else None),
+        )
         timeout = aiohttp.ClientTimeout(total=None, sock_connect=15, sock_read=60)
         try:
             async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
@@ -188,6 +194,13 @@ class Downloader:
                 pr = await probe_mod.probe(session, self.url, self.headers)
                 self.probe = pr
                 await self.emit({"type": "probe", **pr.to_dict()})
+
+                # 证书校验失败：给的是「怎么处理」而不是一串 SSL 异常名
+                if pr.ssl_error:
+                    await self.emit(
+                        {"type": "error", "message": pr.note or "HTTPS 证书校验失败"}
+                    )
+                    return None
 
                 # 注意：HEAD 被 CDN 禁用时 status 是 404/405，但只要 Range 探到了真实大小就照下
                 if pr.status >= 400 and pr.size is None:

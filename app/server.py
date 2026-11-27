@@ -175,11 +175,15 @@ async def handle_start(request: web.Request) -> web.Response:
     verify_hash = str(data.get("verify_hash") or "").strip() or None
     algo = str(data.get("verify_algo") or "sha256").strip() or "sha256"
 
+    # 跳过 HTTPS 证书校验：给被本地代理 / 杀软拦截的站点留条路，默认关
+    insecure = bool(data.get("insecure"))
+
     opts = Options(
         max_concurrency=max_c,
         speed_limit=speed_limit,
         verify_hash=verify_hash,
         verify_algo=algo,
+        insecure=insecure,
     )
 
     st.broadcaster.reset()

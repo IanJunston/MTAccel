@@ -18,7 +18,21 @@ import time
 import urllib.parse
 from dataclasses import dataclass
 
+import ssl
+
 import aiohttp
+
+# 证书校验失败的几种形态：aiohttp 会把底层 ssl 异常包一层
+_SSL_ERRORS = (aiohttp.ClientConnectorCertificateError, ssl.SSLCertVerificationError)
+
+
+def _ssl_hint() -> str:
+    return (
+        "HTTPS 证书校验失败：连接被换成了不受信任的证书。"
+        "常见原因是本机代理 / 杀毒软件在做 HTTPS 拦截（证书链里出现自签证书）。"
+        "两个办法：① 把该站点设为代理直连，或关掉代理的 TUN 模式；"
+        "② 确认站点可信后，勾选「忽略证书校验」再试。"
+    )
 
 DEFAULT_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -57,6 +71,7 @@ class ProbeResult:
     server_checksum: str | None = None
     filename: str | None = None        # 从 Content-Disposition 解析出的真实文件名
     needs_auth: bool = False           # 判定为需要登录 / 无权限
+    ssl_error: bool = False            # HTTPS 证书校验失败（多半是本地代理拦截）
     note: str = ""
 
     @property
@@ -79,6 +94,7 @@ class ProbeResult:
             "can_parallel": self.can_parallel,
             "filename": self.filename,
             "needs_auth": self.needs_auth,
+            "ssl_error": self.ssl_error,
             "note": self.note,
         }
 
@@ -151,6 +167,10 @@ def _fill_meta(res: ProbeResult, headers) -> None:
 
 def _diagnose(res: ProbeResult) -> None:
     """拿不到大小时，把真实原因说清楚，而不是笼统报「无法获取文件大小」。"""
+    # 证书问题已经写好可执行提示了，别被下面的兜底文案盖掉
+    if res.ssl_error:
+        return
+
     ct = (res.content_type or "").lower()
     is_html = ct.startswith("text/html") or ct.startswith("application/xhtml")
 
@@ -217,6 +237,9 @@ async def probe(
                 _fill_meta(res, r.headers)
             else:
                 res.note = f"HEAD {r.status}"
+    except _SSL_ERRORS as e:  # noqa: PERF203
+        res.ssl_error = True
+        res.note = _ssl_hint()
     except Exception as e:  # noqa: BLE001
         res.note = f"HEAD 失败: {type(e).__name__}"
 
@@ -265,6 +288,9 @@ async def probe(
                 if not head_ok:
                     _fill_meta(res, r.headers)
                 res.note = (res.note + "; " if res.note else "") + f"Range 探测 HTTP {r.status}"
+    except _SSL_ERRORS:  # noqa: PERF203
+        res.ssl_error = True
+        res.note = _ssl_hint()
     except Exception as e:  # noqa: BLE001
         res.note = (res.note + "; " if res.note else "") + f"Range 探测失败: {type(e).__name__}"
 

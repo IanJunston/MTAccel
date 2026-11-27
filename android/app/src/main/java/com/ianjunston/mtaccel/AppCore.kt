@@ -58,6 +58,8 @@ object AppCore {
     /** 跟随匿名登录重定向拿到的 cookie 要留着，飞书分享链接靠它过鉴权。 */
     val cookieJar = MemoryCookieJar()
 
+    private val insecureClient: OkHttpClient by lazy { InsecureClient.build(cookieJar) }
+
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .cookieJar(cookieJar)
@@ -207,7 +209,9 @@ object AppCore {
         lastProgress = emptyMap()
         lastDone = emptyMap()
 
-        val eng = Engine(client) { ev -> emit(ev) }
+        // 用户勾了「忽略证书校验」就走信任全部的 client，否则用默认的
+        val useClient = if (obj.optBoolean("insecure")) insecureClient else client
+        val eng = Engine(useClient) { ev -> emit(ev) }
         engine = eng
 
         job = scope.launch {

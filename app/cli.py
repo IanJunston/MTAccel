@@ -85,6 +85,7 @@ async def run(args) -> int:
         speed_limit=parse_size(args.limit),
         verify_hash=verify_hash,
         verify_algo=verify_algo,
+        insecure=bool(getattr(args, 'insecure', False)),
     )
 
     state: dict = {"progress": {}, "probe": {}, "strategy": [], "state": "init", "done": None, "error": None}
@@ -196,6 +197,11 @@ def main() -> None:
     ap.add_argument("--limit", help="限速，如 5M")
     ap.add_argument("-H", "--header", action="append", help='自定义请求头，如 -H "Referer: xxx"')
     ap.add_argument("--hash", help="校验 hash，如 sha256:abc123 或 md5:xxx")
+    ap.add_argument(
+        "--insecure",
+        action="store_true",
+        help="跳过 HTTPS 证书校验（本地代理拦截、自签证书站点用）",
+    )
     args = ap.parse_args()
 
     try:

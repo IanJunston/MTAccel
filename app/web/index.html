@@ -117,6 +117,8 @@
   .toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,20px);background:#1a2230;border:1px solid var(--line);
     color:var(--tx);padding:11px 20px;border-radius:10px;font-size:13px;opacity:0;pointer-events:none;transition:.3s;z-index:99;max-width:80vw}
   .toast.show{opacity:1;transform:translate(-50%,0)}
+  .chk{display:flex;align-items:flex-start;gap:8px;margin-top:12px;font-size:12.5px;color:var(--dim);line-height:1.6;cursor:pointer}
+  .chk input{margin-top:3px;accent-color:#3aa0ff;cursor:pointer}
   .toast.err{border-color:rgba(248,113,113,.5);color:#fecaca}
   .toast.ok{border-color:rgba(45,212,167,.5);color:#a7f3d0}
 
@@ -148,6 +150,8 @@
       <summary>高级 · 自定义请求头（需要登录 / 防盗链的链接填这里）</summary>
       <textarea id="headersInput" spellcheck="false" placeholder="每行一条，格式 Name: value&#10;例如：&#10;Cookie: session=xxxxx&#10;Referer: https://example.com/"></textarea>
       <div class="hint">浏览器能下、这里却提示「需要登录」或「拿不到文件大小」，八成是缺 Cookie。在浏览器按 F12 → Network → 找到该文件的请求 → 右键 Copy → Copy as cURL，把里面的 <code>Cookie:</code> 整行贴进来即可。</div>
+      <label class="chk"><input type="checkbox" id="insecureInput"> 忽略 HTTPS 证书校验（本机代理拦截、自签证书站点用；只对信任的站点勾）</label>
+      <div class="hint">提示「证书校验失败 / self-signed certificate in certificate chain」多半是本机代理或杀毒软件在做 HTTPS 拦截。优先把该站点设为代理直连；实在不行再勾这项。</div>
     </details>
     <div class="progress-shell"><div class="progress-bar" id="bar"></div></div>
     <div class="progress-meta">
@@ -544,6 +548,7 @@
       url,
       output: $('outName').value.trim() || undefined,
       headers: parseHeaders($('headersInput').value),
+      insecure: $('insecureInput').checked,
       max_concurrency: Number($('concRange').value),
       speed_limit: Number($('limitRange').value) ? Number($('limitRange').value) * 1024 * 1024 : null,
       verify_hash: $('hashInput').value.trim() || undefined,
